@@ -39,7 +39,7 @@ class TestSerialization(unittest.TestCase):
             with open(os.path.join(tmpdir, "quantize_config.json"), "r") as config_file:
                 config = json.load(config_file)
 
-            self.assertTrue(config["is_marlin_format"])
+            self.assertTrue(config["checkpoint_format"] == "marlin")
 
             start = time.time()
             model = AutoGPTQForCausalLM.from_quantized(tmpdir, device="cuda:0", use_marlin=True)

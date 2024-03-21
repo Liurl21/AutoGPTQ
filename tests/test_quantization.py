@@ -5,7 +5,7 @@ from parameterized import parameterized
 from transformers import AutoTokenizer
 
 from auto_gptq import AutoGPTQForCausalLM, BaseQuantizeConfig
-
+from auto_gptq.modeling.format import FORMAT
 
 class TestQuantization(unittest.TestCase):
     @parameterized.expand([(False,), (True,)])
@@ -22,7 +22,7 @@ class TestQuantization(unittest.TestCase):
             bits=4,
             group_size=128,
             desc_act=False,
-            is_marlin_format=use_marlin,
+            checkpoint_format= FORMAT.MARLIN if use_marlin else FORMAT.GPTQ,
         )
 
         model = AutoGPTQForCausalLM.from_pretrained(

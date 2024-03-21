@@ -62,7 +62,7 @@ from ._utils import (
     simple_dispatch_model,
     unpack_awq,
 )
-from format import FORMAT
+from .format import FORMAT
 
 logger = logging.getLogger(__name__)
 handler = logging.StreamHandler()
@@ -159,7 +159,7 @@ class BaseQuantizeConfig(PushToHubMixin):
 
             normalized = {"checkpoint_format": FORMAT.GPTQ}
             for key, val in args_from_json.items():
-                if key == "checkpoint_format" and val in FORMAT:
+                if key == "checkpoint_format" and val in {f.value for f in FORMAT}:
                     normalized[key] = val
                 if key == "is_marlin_format" and val:
                     normalized["checkpoint_format"] = FORMAT.MARLIN
@@ -503,7 +503,7 @@ class BaseGPTQForCausalLM(nn.Module, PushToHubMixin):
             desc_act=self.quantize_config.desc_act,
             warmup_triton=autotune_warmup_after_quantized,
             force_layer_back_to_cpu=force_layer_back_to_cpu,
-            is_marlin_format=self.quantize_config.is_marlin_format,
+            checkpoint_format=self.quantize_config.checkpoint_format,
         )
         if device_map:
             self.model = remove_hook_from_module(self.model, recurse=True)
@@ -679,7 +679,7 @@ class BaseGPTQForCausalLM(nn.Module, PushToHubMixin):
             safetensors_metadata["gptq_group_size"] = str(self.quantize_config.group_size)
             safetensors_metadata["gptq_desc_act"] = str(self.quantize_config.desc_act)
             safetensors_metadata["gptq_damp_percent"] = str(self.quantize_config.damp_percent)
-            safetensors_metadata["gptq_is_marlin_format"] = str(self.quantize_config.is_marlin_format)
+            safetensors_metadata["gptq_is_marlin_format"] = str(self.quantize_config.checkpoint_format == FORMAT.MARLIN)
 
             safe_save(state_dict, join(save_dir, model_save_name), safetensors_metadata)
         else:
@@ -1036,6 +1036,7 @@ class BaseGPTQForCausalLM(nn.Module, PushToHubMixin):
                     desc_act=quantize_config.desc_act,
                     trainable=trainable,
                     use_tritonv2=use_tritonv2,
+                    checkpoint_format=quantize_config.checkpoint_format,
                 )
                 model.tie_weights()
 
@@ -1306,6 +1307,7 @@ class BaseGPTQForCausalLM(nn.Module, PushToHubMixin):
                 trainable=trainable,
                 use_qigen=True,
                 use_tritonv2=use_tritonv2,
+                checkpoint_format=quantize_config.checkpoint_format,
             )
             preprocess_checkpoint_qigen(
                 model,
