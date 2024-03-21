@@ -3,7 +3,6 @@ import json
 import logging
 import os
 from dataclasses import dataclass, field, fields
-from enum import Enum
 from os.path import isdir, join
 from typing import Dict, List, Optional, Union
 
@@ -63,6 +62,7 @@ from ._utils import (
     simple_dispatch_model,
     unpack_awq,
 )
+from format import FORMAT
 
 logger = logging.getLogger(__name__)
 handler = logging.StreamHandler()
@@ -75,13 +75,6 @@ SYNONYMS = {
     "w_bit": "bits",
     "q_group_size": "group_size",
 }
-
-# checkpoint formats
-class FORMAT(Enum):
-    GPTQ = "gptq"
-    GPTQ_V2 = "gptq_v2"
-    MARLIN = "marlin"
-    AWQ_GEMM = "awq_gemm"
 
 @dataclass
 class BaseQuantizeConfig(PushToHubMixin):

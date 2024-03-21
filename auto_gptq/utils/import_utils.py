@@ -4,7 +4,7 @@ from typing import Optional
 import torch
 from packaging.version import parse as parse_version
 
-from auto_gptq.modeling._base import FORMAT
+from auto_gptq.modeling.format import FORMAT
 
 try:
     import triton  # noqa: F401

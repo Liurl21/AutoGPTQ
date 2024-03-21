@@ -11,7 +11,7 @@ import transformers
 from transformers import AutoConfig
 from transformers.utils.hub import cached_file
 
-from ._base import FORMAT
+from format import FORMAT
 from ..utils.import_utils import dynamically_import_QuantLinear
 from ..utils.modeling_utils import recurse_setattr
 from ._const import CPU, CUDA_0, EXLLAMA_DEFAULT_MAX_INPUT_LENGTH, SUPPORTED_MODELS
