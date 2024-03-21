@@ -3,6 +3,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass, field, fields
+from enum import Enum
 from os.path import isdir, join
 from typing import Dict, List, Optional, Union
 
@@ -63,7 +64,6 @@ from ._utils import (
     unpack_awq,
 )
 
-
 logger = logging.getLogger(__name__)
 handler = logging.StreamHandler()
 formatter = logging.Formatter("%(levelname)s - %(message)s")
@@ -76,6 +76,12 @@ SYNONYMS = {
     "q_group_size": "group_size",
 }
 
+# checkpoint formats
+class FORMAT(Enum):
+    GPTQ = "gptq"
+    GPTQ_V2 = "gptq_v2"
+    MARLIN = "marlin"
+    AWQ_GEMM = "awq_gemm"
 
 @dataclass
 class BaseQuantizeConfig(PushToHubMixin):
@@ -86,10 +92,9 @@ class BaseQuantizeConfig(PushToHubMixin):
     static_groups: bool = field(default=False)
     sym: bool = field(default=True)
     true_sequential: bool = field(default=True)
-    is_marlin_format: bool = field(default=False)
+    checkpoint_format: str = field(default=FORMAT.GPTQ)
     model_name_or_path: Optional[str] = field(default=None)
     model_file_base_name: Optional[str] = field(default=None)
-    awq_gemm_checkpoint: Optional[bool] = field(default=False)
 
     def __post_init__(self):
         fields_info = fields(self)
@@ -159,27 +164,31 @@ class BaseQuantizeConfig(PushToHubMixin):
             if transformers_config:
                 args_from_json = args_from_json["quantization_config"]
 
-            filtered_args = {"awq_gemm_checkpoint": False}
+            normalized = {"checkpoint_format": FORMAT.GPTQ}
             for key, val in args_from_json.items():
-                if key == "version" and val == "GEMM":
-                    filtered_args["awq_gemm_checkpoint"] = True
+                if key == "checkpoint_format" and val in FORMAT:
+                    normalized[key] = val
+                if key == "is_marlin_format" and val:
+                    normalized["checkpoint_format"] = FORMAT.MARLIN
+                elif (key == "awq_gemm_checkpoint" and val) or (key == "version" and val == "GEMM"):
+                    normalized["checkpoint_format"] = FORMAT.AWQ_GEMM
                 elif key in field_names:
-                    filtered_args[key] = val
+                    normalized[key] = val
                 elif key in SYNONYMS and SYNONYMS[key] in field_names:
-                    filtered_args[SYNONYMS[key]] = val
+                    normalized[SYNONYMS[key]] = val
                 else:
                     logger.warning(f"ignoring unknown parameter in {quantize_config_filename}: {key}.")
 
-            if filtered_args["awq_gemm_checkpoint"]:
-                # AWQ does not reorder the rows.
-                filtered_args["desc_act"] = False
+            if normalized["checkpoint_format"] in [FORMAT.AWQ_GEMM, FORMAT.MARLIN]:
+                # AWQ and Marlin does not reorder the rows.
+                normalized["desc_act"] = False
 
             if "sym" not in args_from_json:
                 logger.warning(
                     f"The quantization configuration {quantize_config_filename} does not contain an entry `sym` (symetric quantization). This may result in silent errors."
                 )
 
-            return cls(**filtered_args)
+            return cls(**normalized)
 
     def to_dict(self):
         return {
@@ -192,7 +201,7 @@ class BaseQuantizeConfig(PushToHubMixin):
             "true_sequential": self.true_sequential,
             "model_name_or_path": self.model_name_or_path,
             "model_file_base_name": self.model_file_base_name,
-            "is_marlin_format": self.is_marlin_format,
+            "checkpoint_format": self.checkpoint_format,
             "quant_method": "gptq",
         }
 
@@ -924,6 +933,13 @@ class BaseGPTQForCausalLM(nn.Module, PushToHubMixin):
         if quantize_config is None:
             quantize_config = BaseQuantizeConfig.from_pretrained(model_name_or_path, **cached_file_kwargs, **kwargs)
 
+        if quantize_config.checkpoint_format == FORMAT.MARLIN:
+            # format marlin requires marlin kernel
+            use_marlin = True
+
+        if use_marlin and (not MARLIN_AVAILABLE or not _validate_marlin_device_support()):
+            raise TypeError(f"use_marlin is true but Marlin is not availble due to cuda/device support.")
+
         if not use_marlin and MARLIN_AVAILABLE:
             unsupported_reason = _validate_marlin_compatibility(quantize_config)
             if unsupported_reason is None and _validate_marlin_device_support():
@@ -931,11 +947,7 @@ class BaseGPTQForCausalLM(nn.Module, PushToHubMixin):
                     "You passed a model that is compatible with the Marlin int4*fp16 GPTQ kernel but use_marlin is False. We recommend using `use_marlin=True` to use the optimized Marlin kernels for inference. Example: `model = AutoGPTQForCausalLM.from_quantized(..., use_marlin=True)`."
                 )
 
-        if hasattr(quantize_config, "is_marlin_format") and quantize_config.is_marlin_format and not use_marlin:
-            raise ValueError(
-                "You passed a GPTQ model saved in int4*fp16 GPTQ Marlin kernel format but are loading with use_marlin=False. "
-                "Please use `use_marlin=True` to load this model. Example: `model = AutoGPTQForCausalLM.from_quantized(..., use_marlin=True)`."
-            )
+
 
         if model_basename is None:
             if quantize_config.model_file_base_name:
@@ -1081,7 +1093,7 @@ class BaseGPTQForCausalLM(nn.Module, PushToHubMixin):
                 )
 
             # TODO: move this logic in an awq_utils.py file.
-            if quantize_config.awq_gemm_checkpoint:
+            if quantize_config.checkpoint_format == FORMAT.AWQ_GEMM:
                 if is_sharded:
                     raise ValueError("The loading of sharded checkpoints with AWQ checkpoints is currently not supported. Please raise an issue in AutoGPTQ repository.")
 
@@ -1229,7 +1241,7 @@ class BaseGPTQForCausalLM(nn.Module, PushToHubMixin):
                     bits=quantize_config.bits,
                     disable_exllama=disable_exllama,
                     disable_exllamav2=disable_exllamav2,
-                    disable_marlin=True,
+                    checkpoint_format=FORMAT.MARLIN,
                     use_tritonv2=use_tritonv2,  # Get the "original" QuantLienar class
                 )
 

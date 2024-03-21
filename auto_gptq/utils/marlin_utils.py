@@ -102,7 +102,7 @@ def _get_cached_marlin_save_name(model_name_or_path):
         return os.path.join(assets_path, "autogptq_model.safetensors")
 
 
-# Validate marlin suppor
+# Validate marlin support
 def _validate_marlin_device_support():
     device_capacity = torch.cuda.get_device_capability()
     return device_capacity[0] == 8 and (device_capacity[1] == 0 or device_capacity[1] == 6)

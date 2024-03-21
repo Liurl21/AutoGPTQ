@@ -11,6 +11,7 @@ import transformers
 from transformers import AutoConfig
 from transformers.utils.hub import cached_file
 
+from ._base import FORMAT
 from ..utils.import_utils import dynamically_import_QuantLinear
 from ..utils.modeling_utils import recurse_setattr
 from ._const import CPU, CUDA_0, EXLLAMA_DEFAULT_MAX_INPUT_LENGTH, SUPPORTED_MODELS
@@ -65,7 +66,7 @@ def make_quant(
     group_size,
     name="",
     use_triton: bool = False,
-    use_marlin: bool = False,
+    checkpoint_format: str = FORMAT.GPTQ,
     disable_exllama: Optional[bool] = None,
     disable_exllamav2: bool = False,
     use_qigen: bool = False,
@@ -86,7 +87,7 @@ def make_quant(
         desc_act=desc_act,
         group_size=group_size,
         bits=bits,
-        disable_marlin=not use_marlin,
+        checkpoint_format=checkpoint_format,
         disable_exllama=disable_exllama,
         disable_exllamav2=disable_exllamav2,
         use_qigen=use_qigen,
@@ -255,7 +256,7 @@ def pack_model(
     desc_act=False,
     warmup_triton: bool = False,
     force_layer_back_to_cpu: bool = False,
-    is_marlin_format: bool = False,
+    checkpoint_format: str = FORMAT.GPTQ,
 ):
     QuantLinear = dynamically_import_QuantLinear(
         use_triton=use_triton,
@@ -264,7 +265,7 @@ def pack_model(
         bits=bits,
         disable_exllama=False,
         disable_exllamav2=True,
-        disable_marlin=not is_marlin_format,
+        checkpoint_format=checkpoint_format,
     )
 
     if force_layer_back_to_cpu:
@@ -283,7 +284,7 @@ def pack_model(
         desc_act=desc_act,
         disable_exllama=False,
         disable_exllamav2=True,
-        use_marlin=is_marlin_format,
+        checkpoint_format=checkpoint_format,
     )
     qlayers = find_layers(model, [QuantLinear])
     for name in qlayers:
