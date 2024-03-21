@@ -1220,7 +1220,7 @@ class BaseGPTQForCausalLM(nn.Module, PushToHubMixin):
                     raise ValueError("The loading of sharded checkpoints with Marlin is currently not supported. Please raise an issue in AutoGPTQ repository.")
                 if torch.version.hip:
                     raise ValueError("Can not use Marlin int4*fp16 kernel with AMD ROCm version of PyTorch as the kernel is not compatible. Please do not use `use_marlin=True` when using ROCm devices.")
-                if not torch.cuda.get_device_capability()[0] >= 8:
+                if not _validate_marlin_device_support():
                     raise ValueError(f'Can not use Marlin int4*fp16 kernel with a device of compute capability {torch.cuda.get_device_capability()}, the minimum compute capability is 8.0 for Marlin kernel. Please do not use `use_marlin=True`, or please upgrade your GPU ("The more you buy, the more you save." - Taiwanese proverb).')
 
                 # Validate the model can run in Marlin.
